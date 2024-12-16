@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  cursor2api:
+    image: 301redirect/cursor2api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    # 如果需要持久化存储，可以取消下面的注释
+    # volumes:
+    #   - ./data:/app/data

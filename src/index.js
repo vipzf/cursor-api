@@ -1,11 +1,27 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { stringToHex, chunkToUtf8String, getRandomIDPro } = require('./utils.js');
 const app = express();
 
 // 中间件配置
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// 从环境变量获取salt，如果未设置则使用默认值
+const CHECKSUM_SALT = process.env.CURSOR_CHECKSUM_SALT || 'cursor_checksum_salt';
+
+function generateChecksum(token) {
+  const cleanToken = token.trim();
+
+  const hmac = crypto.createHmac('sha512', CHECKSUM_SALT);
+  const hash = hmac.update(cleanToken).digest('hex');  // 128个字符
+  
+  const firstPart = hash.slice(0, 70);     // 前70个字符
+  const secondPart = hash.slice(-64);       // 后64个字符
+  
+  return `zo${firstPart}/${secondPart}`;
+}
 
 app.post('/v1/chat/completions', async (req, res) => {
   // o1开头的模型，不支持流式输出
@@ -40,11 +56,10 @@ app.post('/v1/chat/completions', async (req, res) => {
 
     const hexData = await stringToHex(messages, model);
 
-    // 获取checksum，req header中传递优先，环境变量中的等级第二，最后随机生成
-    const checksum =
-      req.headers['x-cursor-checksum'] ??
-      process.env['x-cursor-checksum'] ??
-      `zo${getRandomIDPro({ dictType: 'max', size: 6 })}${getRandomIDPro({ dictType: 'max', size: 64 })}/${getRandomIDPro({ dictType: 'max', size: 64 })}`;
+    // 修改 checksum 生成逻辑
+    const checksum = req.headers['x-cursor-checksum'] ?? 
+                    process.env['x-cursor-checksum'] ?? 
+                    generateChecksum(authToken);
 
     const response = await fetch('https://api2.cursor.sh/aiserver.v1.AiService/StreamChat', {
       method: 'POST',
