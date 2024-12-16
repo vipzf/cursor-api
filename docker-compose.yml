@@ -3,9 +3,6 @@ version: '3.8'
 services:
   cursor2api:
     image: 301redirect/cursor2api:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
