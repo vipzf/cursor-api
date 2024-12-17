@@ -78,6 +78,10 @@ app.post('/v1/chat/completions', async (req, res) => {
         Host: 'api2.cursor.sh',
       },
       body: hexData,
+      timeout: {
+        connect: 5000,    // 连接超时 5 秒
+        read: 30000       // 读取超时 30 秒
+      }
     });
 
     if (stream) {
@@ -87,73 +91,92 @@ app.post('/v1/chat/completions', async (req, res) => {
 
       const responseId = `chatcmpl-${uuidv4()}`;
 
-      // 使用封装的函数处理 chunk
-      for await (const chunk of response.body) {
-        const text = await chunkToUtf8String(chunk);
+      try {
+        for await (const chunk of response.body) {
+          const text = await chunkToUtf8String(chunk);
 
-        if (text.length > 0) {
-          res.write(
-            `data: ${JSON.stringify({
-              id: responseId,
-              object: 'chat.completion.chunk',
-              created: Math.floor(Date.now() / 1000),
-              model,
-              choices: [
-                {
-                  index: 0,
-                  delta: {
-                    content: text,
+          if (text.length > 0) {
+            res.write(
+              `data: ${JSON.stringify({
+                id: responseId,
+                object: 'chat.completion.chunk',
+                created: Math.floor(Date.now() / 1000),
+                model: req.body.model,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      content: text,
+                    },
                   },
-                },
-              ],
-            })}\n\n`,
-          );
+                ],
+              })}\n\n`
+            );
+          }
         }
+      } catch (streamError) {
+        console.error('Stream error:', streamError);
+        if (streamError.name === 'TimeoutError') {
+          res.write(`data: ${JSON.stringify({ error: 'Server response timeout' })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ error: 'Stream processing error' })}\n\n`);
+        }
+      } finally {
+        res.write('data: [DONE]\n\n');
+        res.end();
       }
-
-      res.write('data: [DONE]\n\n');
-      return res.end();
     } else {
-      let text = '';
-      // 在非流模式下也使用封装的函数
-      for await (const chunk of response.body) {
-        text += await chunkToUtf8String(chunk);
-      }
-      // 对解析后的字符串进行进一步处理
-      text = text.replace(/^.*<\|END_USER\|>/s, '');
-      text = text.replace(/^\n[a-zA-Z]?/, '').trim();
-      // console.log(text)
+      try {
+        let text = '';
+        for await (const chunk of response.body) {
+          text += await chunkToUtf8String(chunk);
+        }
+        // 对解析后的字符串进行进一步处理
+        text = text.replace(/^.*<\|END_USER\|>/s, '');
+        text = text.replace(/^\n[a-zA-Z]?/, '').trim();
+        // console.log(text)
 
-      return res.json({
-        id: `chatcmpl-${uuidv4()}`,
-        object: 'chat.completion',
-        created: Math.floor(Date.now() / 1000),
-        model,
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: text,
+        return res.json({
+          id: `chatcmpl-${uuidv4()}`,
+          object: 'chat.completion',
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: 'assistant',
+                content: text,
+              },
+              finish_reason: 'stop',
             },
-            finish_reason: 'stop',
+          ],
+          usage: {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
           },
-        ],
-        usage: {
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
-        },
-      });
+        });
+      } catch (error) {
+        console.error('Non-stream error:', error);
+        if (error.name === 'TimeoutError') {
+          return res.status(408).json({ error: 'Server response timeout' });
+        }
+        throw error;  // 让外层错误处理来处理其他类型的错误
+      }
     }
   } catch (error) {
     console.error('Error:', error);
     if (!res.headersSent) {
+      const errorMessage = {
+        error: error.name === 'TimeoutError' ? 'Request timeout' : 'Internal server error'
+      };
+
       if (req.body.stream) {
-        res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
+        res.write(`data: ${JSON.stringify(errorMessage)}\n\n`);
         return res.end();
       } else {
-        return res.status(500).json({ error: 'Internal server error' });
+        return res.status(error.name === 'TimeoutError' ? 408 : 500).json(errorMessage);
       }
     }
   }
