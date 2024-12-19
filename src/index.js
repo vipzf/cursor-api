@@ -1,26 +1,17 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
-const { stringToHex, chunkToUtf8String, getRandomIDPro } = require('./utils.js');
+const { stringToHex, chunkToUtf8String, getRandomIDPro, generateCursorChecksum } = require('./utils.js');
 const app = express();
 
 // 中间件配置
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 从环境变量获取salt，如果未设置则使用默认值
-const CHECKSUM_SALT = process.env.CURSOR_CHECKSUM_SALT || 'cursor_checksum_salt';
 
 function generateChecksum(token) {
   const cleanToken = token.trim();
-
-  const hmac = crypto.createHmac('sha512', CHECKSUM_SALT);
-  const hash = hmac.update(cleanToken).digest('hex');  // 128个字符
-  
-  const firstPart = hash.slice(0, 70);     // 前70个字符
-  const secondPart = hash.slice(-64);       // 后64个字符
-  
-  return `zo${firstPart}/${secondPart}`;
+  return generateCursorChecksum(cleanToken);
 }
 
 app.post('/v1/chat/completions', async (req, res) => {
