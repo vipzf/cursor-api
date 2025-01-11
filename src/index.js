@@ -172,7 +172,7 @@ app.post('/v1/chat/completions', async (req, res) => {
 });
 
 // 启动服务器
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 9967;
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
 });
