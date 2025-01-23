@@ -24,13 +24,38 @@
 
 ## 生产环境部署
 
-### 方式二：docker 部署
+> 注意：系统会根据您提供的 WorkosCursorSessionToken 自动生成合适的 checksum，无需手动设置。
+
+### Docker 方式一：直接运行
 
 ```bash
-docker run -d --name cursor-api -e x-cursor-checksum=xxxxxx -p 3000:3000 zhx47/cursor-api:latest
+docker run -d --name cursor-api -p 3000:3000 301redirect/cursor2api:latest
 ```
 
-> 如果不需要执行checksum可以不设置，优先级为req header中的x-cursor-checksum > 环境变量中的x-cursor-checksum > 随机生成
+### Docker 方式二：Docker Compose
+
+创建 `docker-compose.yml` 文件：
+
+```yaml
+version: '3.8'
+
+services:
+  cursor2api:
+    image: 301redirect/cursor2api:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    # 如果需要持久化存储，可以取消下面的注释
+    # volumes:
+    #   - ./data:/app/data
+```
+
+运行服务：
+```bash
+docker compose up -d
+```
 
 ## 本地开发
 

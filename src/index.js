@@ -27,19 +27,15 @@ app.post('/v1/chat/completions', async (req, res) => {
     });
   }
 
-  let currentKeyIndex = 0;
   try {
     const { model, messages, stream = false } = req.body;
     let authToken = req.headers.authorization?.replace('Bearer ', '');
     // 处理逗号分隔的密钥
     const keys = authToken.split(',').map((key) => key.trim());
     if (keys.length > 0) {
-      // 确保 currentKeyIndex 不会越界
-      if (currentKeyIndex >= keys.length) {
-        currentKeyIndex = 0;
-      }
-      // 使用当前索引获取密钥
-      authToken = keys[currentKeyIndex];
+      // 随机选择一个密钥
+      const randomIndex = Math.floor(Math.random() * keys.length);
+      authToken = keys[randomIndex];
     }
     if (authToken && authToken.includes('%3A%3A')) {
       authToken = authToken.split('%3A%3A')[1];
